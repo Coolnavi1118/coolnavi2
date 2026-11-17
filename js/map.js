@@ -1,5 +1,5 @@
 /**
- * map.js - Leaflet 高機能・洗練マップ制御 (CartoDB Positron & ネオングローUI)
+ * map.js - Leaflet 高機能・シック＆エレガントマップ制御 (CartoDB Dark Matter & ゴールド/シアンアクセント)
  */
 
 const MapManager = {
@@ -24,8 +24,8 @@ const MapManager = {
 
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
-    // 美しく洗練された CartoDB Positron ベクター調タイル
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    // シックで上質な CartoDB Dark Matter タイル
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
       subdomains: 'abcd',
       attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -63,9 +63,9 @@ const MapManager = {
       if (!this.currentAccuracyCircle) {
         this.currentAccuracyCircle = L.circle(latLng, {
           radius: Math.min(location.accuracy, 150),
-          color: '#00B4D8',
-          fillColor: '#90E0EF',
-          fillOpacity: 0.15,
+          color: '#38BDF8',
+          fillColor: '#38BDF8',
+          fillOpacity: 0.12,
           weight: 1.5,
           dashArray: '4, 4'
         }).addTo(this.map);
@@ -145,44 +145,44 @@ const MapManager = {
     this.routeLayerGroup.clearLayers();
     if (!routeData || !routeData.coordinates || routeData.coordinates.length < 2) return;
 
-    // 1. ネオングロー背景線 (光彩)
+    // 1. シャンパンゴールド光彩背景線
     const glowPolyline = L.polyline(routeData.coordinates, {
-      color: '#00B4D8',
+      color: '#D4AF37',
       weight: 12,
-      opacity: 0.25,
+      opacity: 0.22,
       lineCap: 'round',
       lineJoin: 'round'
     });
     this.routeLayerGroup.addLayer(glowPolyline);
 
-    // 2. コアの道路沿いルートライン (クールシアン)
+    // 2. コアの道路沿いルートライン (シックなシャンパンゴールド)
     const mainPolyline = L.polyline(routeData.coordinates, {
-      color: '#0077B6',
-      weight: 5,
+      color: '#D4AF37',
+      weight: 4.5,
       opacity: 0.95,
       lineCap: 'round',
       lineJoin: 'round'
     });
     this.routeLayerGroup.addLayer(mainPolyline);
 
-    // 3. 進行方向の動的ドット
+    // 3. 進行方向の動的ドット (プラチナホワイト)
     const animatedLine = L.polyline(routeData.coordinates, {
-      color: '#90E0EF',
+      color: '#F3E5AB',
       weight: 2,
-      opacity: 0.8,
-      dashArray: '6, 12'
+      opacity: 0.85,
+      dashArray: '5, 10'
     });
     this.routeLayerGroup.addLayer(animatedLine);
 
-    // 4. 曲がり角マーカー
+    // 4. 曲がり角マーカー (シアン)
     if (routeData.steps && routeData.steps.length > 2) {
       routeData.steps.slice(1, -1).forEach(step => {
         const turnDot = L.circleMarker(step.location, {
-          radius: 6,
+          radius: 5,
           color: '#FFFFFF',
-          fillColor: '#FF7A00',
+          fillColor: '#38BDF8',
           fillOpacity: 1,
-          weight: 2.5
+          weight: 2
         });
         turnDot.bindTooltip(step.instruction, { direction: 'top', offset: [0, -8] });
         this.routeLayerGroup.addLayer(turnDot);
