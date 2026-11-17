@@ -1,16 +1,47 @@
 /**
- * ar.js - 高性能道路沿いARナビゲーション (Turn-by-Turn AR Navigation)
- * 
- * 進化した機能:
- * 1. 道路網に沿ったターンバイターンAR案内
- *    - 単なる目的地の直線ではなく、「次の曲がり角（交差点）」の方角と距離を正確に案内
- *    - 「80m先を右折」「道なりに直進」などのナビゲーション指示と連動したダイナミック矢印
- * 2. カメラ映像空間に重なる 3D AR Floating Pin (空間浮遊ピン)
- *    - 端末の向き(Heading)と傾き(Pitch/Beta)から、実際の街並み・空間上の方向にマーカーを描画
- * 3. 曲がり角への自動到達判定とステップ自動更新 (Auto-advancement)
- * 4. 2Dレーダー/コンパスへの自動フォールバックと手動切り替え
- * 5. iPhone Safari の DeviceOrientationEvent.requestPermission 完全対応
+ * ar.js - 未来型高性能ARナビゲーション (HUD / ジャイロ地平線 / クリスタルサウンド / ハプティクス)
  */
+
+const SoundFX = {
+  ctx: null,
+
+  init() {
+    if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioCtx();
+    }
+  },
+
+  // 涼やかで透明感のあるクリスタル音 (起動・ロックオン時)
+  playChime(freq = 880, type = 'sine', duration = 0.25) {
+    try {
+      this.init();
+      if (!this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.5, this.ctx.currentTime + duration);
+
+      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start();
+      osc.stop(this.ctx.currentTime + duration);
+    } catch (e) {}
+  },
+
+  // 正面ロックオン音
+  playLockOn() {
+    this.playChime(1046.5, 'sine', 0.15); // C6 高音
+  }
+};
 
 const ARManager = {
   videoElement: null,
@@ -19,31 +50,23 @@ const ARManager = {
   isOrientationActive: false,
   orientationPermissionGranted: false,
 
-  // ナビゲーション対象
   currentDestination: null,
   currentLocation: null,
-  currentRoute: null, // RoutingManager からの道路ルート
-  navMode: 'road', // 'road' (道路沿い案内) | 'direct' (目的地直線案内)
+  currentRoute: null,
+  navMode: 'road',
 
-  // 端末姿勢センサ
-  deviceHeading: 0, // 水平方位角 (0〜360度)
-  devicePitch: 0,   // 傾き・仰角 (前後傾き beta)
-  deviceRoll: 0,    // 左右傾き (gamma)
+  deviceHeading: 0,
+  devicePitch: 0,
+  deviceRoll: 0,
 
-  // 更新コールバック
+  wasStraight: false, // 前フレームで正面だったか (ロックオン音のトリガー)
   onUpdateCallback: null,
 
-  /**
-   * 初期化
-   */
   init(videoEl, onUpdate = null) {
     this.videoElement = videoEl;
     this.onUpdateCallback = onUpdate;
   },
 
-  /**
-   * ナビゲーション設定 (目的地 & 道路ルート)
-   */
   setNavigation(destination, currentLocation, route = null) {
     this.currentDestination = destination;
     this.currentLocation = currentLocation;
@@ -51,9 +74,6 @@ const ARManager = {
     this.updateARState();
   },
 
-  /**
-   * 現在地更新
-   */
   updateLocation(location) {
     this.currentLocation = location;
     if (this.currentRoute && this.navMode === 'road') {
@@ -62,17 +82,16 @@ const ARManager = {
     this.updateARState();
   },
 
-  /**
-   * ARセッション開始
-   */
   async startAR() {
     let cameraSuccess = false;
     let orientationSuccess = false;
 
+    SoundFX.init();
     orientationSuccess = await this.startOrientationTracking();
 
     try {
       cameraSuccess = await this.startCamera();
+      SoundFX.playChime(659.25, 'sine', 0.35); // 起動音
     } catch (e) {
       console.warn("カメラ起動スキップ/失敗:", e);
       cameraSuccess = false;
@@ -81,9 +100,6 @@ const ARManager = {
     return { camera: cameraSuccess, orientation: orientationSuccess };
   },
 
-  /**
-   * 背面カメラの起動
-   */
   async startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error("カメラAPI非対応です。");
@@ -94,8 +110,8 @@ const ARManager = {
     const constraints = {
       video: {
         facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
       },
       audio: false
     };
@@ -110,9 +126,6 @@ const ARManager = {
     return true;
   },
 
-  /**
-   * カメラ停止
-   */
   stopCamera() {
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
@@ -124,9 +137,6 @@ const ARManager = {
     this.isCameraActive = false;
   },
 
-  /**
-   * 端末姿勢センサ (DeviceOrientation) 開始
-   */
   async startOrientationTracking() {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
@@ -153,9 +163,6 @@ const ARManager = {
     return true;
   },
 
-  /**
-   * センサイベントハンドラ
-   */
   handleOrientation(event) {
     let heading = null;
 
@@ -186,24 +193,17 @@ const ARManager = {
     this.stopOrientationTracking();
   },
 
-  /**
-   * 道路ナビモードと直線ナビモードの切り替え
-   */
   toggleNavMode() {
     this.navMode = (this.navMode === 'road') ? 'direct' : 'road';
     this.updateARState();
     return this.navMode;
   },
 
-  /**
-   * ARの計算状態を更新
-   */
   updateARState() {
     if (!this.currentDestination || !this.currentLocation) {
       return;
     }
 
-    // 1. 最終目的地までの全体距離と方位
     const finalDistance = calculateDistance(
       this.currentLocation.latitude,
       this.currentLocation.longitude,
@@ -217,15 +217,14 @@ const ARManager = {
       this.currentDestination.longitude
     );
 
-    // 2. ターゲット地点の決定 (道路沿いの次の曲がり角か、最終目的地か)
     let targetLat = this.currentDestination.latitude;
     let targetLon = this.currentDestination.longitude;
     let targetDistance = finalDistance;
     let targetBearing = finalBearing;
     let currentStepInfo = null;
-    let turnAction = "straight"; // 'straight', 'right', 'left', 'arrive'
+    let turnAction = "straight";
     let turnIcon = "↑";
-    let stepInstruction = "目的地へ向かって進んでください";
+    let stepInstruction = "避難シェルターへ向かって進んでください";
 
     if (this.navMode === 'road' && this.currentRoute && this.currentRoute.steps) {
       const stepState = RoutingManager.updateCurrentStep(this.currentLocation);
@@ -247,43 +246,49 @@ const ARManager = {
       }
     }
 
-    // 3. 端末Headingとの相対角度差分 (-180〜+180度)
     let relativeAngle = (targetBearing - this.deviceHeading + 360) % 360;
     if (relativeAngle > 180) relativeAngle -= 360;
 
-    // 4. 方向ガイドメッセージの生成
-    let directionText = "正面に進む";
+    let directionText = "この方向へ直進";
     let isStraight = false;
 
-    if (Math.abs(relativeAngle) <= 18) {
-      directionText = "この方向へ直進";
+    if (Math.abs(relativeAngle) <= 15) {
+      directionText = "【正面】直進してください";
       isStraight = true;
-    } else if (relativeAngle > 18 && relativeAngle <= 65) {
-      directionText = "ななめ右方向";
+      // ロックオン時サウンド & バイブレーション
+      if (!this.wasStraight) {
+        SoundFX.playLockOn();
+        if (navigator.vibrate) navigator.vibrate(20);
+      }
+    } else if (relativeAngle > 15 && relativeAngle <= 65) {
+      directionText = "ななめ右方向 ↗";
     } else if (relativeAngle > 65 && relativeAngle <= 115) {
-      directionText = "右を向いてください";
+      directionText = "右を向いてください ➔";
     } else if (relativeAngle > 115 && relativeAngle <= 160) {
-      directionText = "右うしろ方向";
-    } else if (relativeAngle < -18 && relativeAngle >= -65) {
-      directionText = "ななめ左方向";
+      directionText = "右うしろ方向 ↘";
+    } else if (relativeAngle < -15 && relativeAngle >= -65) {
+      directionText = "ななめ左方向 ↖";
     } else if (relativeAngle < -65 && relativeAngle >= -115) {
-      directionText = "左を向いてください";
+      directionText = "左を向いてください ⬅";
     } else if (relativeAngle < -115 && relativeAngle >= -160) {
-      directionText = "左うしろ方向";
+      directionText = "左うしろ方向 ↙";
     } else {
-      directionText = "後ろを向いてください";
+      directionText = "後ろを向いてください ↷";
     }
 
-    // 5. 3D空間浮遊ピンのスクリーン投影座標計算 (FOV 60度基準)
+    this.wasStraight = isStraight;
+
+    // 3D空間浮遊ピンのスクリーン投影 (FOV 65度)
     const horizontalFov = 65;
-    let screenXPercent = (relativeAngle / (horizontalFov / 2)) * 50; // -50% 〜 +50%
+    let screenXPercent = (relativeAngle / (horizontalFov / 2)) * 50;
     const isVisibleInScreen = Math.abs(relativeAngle) < (horizontalFov / 2);
 
-    // 端末の上下傾き (Pitch: 0度=水平, 90度=垂直持ち)
-    // 垂直に持った状態(約70〜90度)を基準に上下位置をオフセット
-    const targetPitch = 75;
+    const targetPitch = 75; // スマホ垂直持ち
     const pitchDiff = (this.devicePitch - targetPitch);
-    let screenYPercent = Math.max(-40, Math.min(40, pitchDiff * 0.8));
+    let screenYPercent = Math.max(-38, Math.min(38, pitchDiff * 0.7));
+
+    // 日陰歩行アドバイス
+    const shadeAdvice = getShadeAdvice(targetBearing, this.currentLocation.latitude, this.currentLocation.longitude);
 
     const state = {
       destination: this.currentDestination,
@@ -297,6 +302,7 @@ const ARManager = {
       finalBearing,
       heading: this.deviceHeading,
       pitch: this.devicePitch,
+      roll: this.deviceRoll,
       relativeAngle,
       directionText,
       turnIcon,
@@ -307,6 +313,7 @@ const ARManager = {
       screenXPercent,
       screenYPercent,
       isVisibleInScreen,
+      shadeAdvice,
       isCameraActive: this.isCameraActive,
       isOrientationActive: this.isOrientationActive
     };

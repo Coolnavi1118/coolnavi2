@@ -1,10 +1,5 @@
 /**
- * app.js - CoolNavi アプリケーション全体制御
- * 
- * 完全現在地連動オープンデータ検索版:
- * - places.json は一切使用しません
- * - 端末のGPSから取得した本物の現在地周辺のみを検索・表示
- * - 偽データや東京駅のフォールバックを排除
+ * app.js - CoolNavi アプリケーション全体制御 (ハイエンドグラスモルフィズム & フィルター & 日陰案内)
  */
 
 window.CoolNaviApp = {
@@ -13,27 +8,26 @@ window.CoolNaviApp = {
   selectedPlace: null,
   currentRoute: null,
   weatherData: null,
-  activeFilter: 'recommend',
+  activeSort: 'recommend', // 'recommend' | 'distance'
+  activeFilterChip: 'all',  // 'all' | 'cool' | 'water' | 'seat' | 'empty'
 
   async init() {
     this.bindEvents();
 
-    // 1. 地図の初期化
     MapManager.initMap('map-container', (place) => {
       this.onPlaceMarkerClicked(place);
     });
 
-    // 2. ARの初期化
     const arVideo = document.getElementById('ar-video');
     ARManager.init(arVideo, (state) => {
       this.renderAROverlay(state);
     });
 
-    // 3. 現在地(GPS)を取得して即座に周辺施設を検索
     await this.refreshLocation(false);
   },
 
   bindEvents() {
+    // ボトムナビ
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', (e) => {
         const tab = e.currentTarget.dataset.tab;
@@ -41,6 +35,7 @@ window.CoolNaviApp = {
       });
     });
 
+    // メインCTA
     const btnFindPlaces = document.getElementById('btn-find-places');
     if (btnFindPlaces) {
       btnFindPlaces.addEventListener('click', () => this.switchTab('list'));
@@ -63,6 +58,7 @@ window.CoolNaviApp = {
       });
     }
 
+    // 現在地更新
     const btnRefreshLocation = document.getElementById('btn-refresh-location');
     if (btnRefreshLocation) {
       btnRefreshLocation.addEventListener('click', () => this.refreshLocation(true));
@@ -75,30 +71,42 @@ window.CoolNaviApp = {
           this.refreshLocation(true);
           return;
         }
-        this.showToast('現在地周辺のクーリングシェルターを再検索中...');
+        this.showToast('現在地周辺の避難所を検索中...');
         await PlacesManager.fetchPlacesByLocation(this.currentLocation.latitude, this.currentLocation.longitude);
         this.renderAllViews();
-        this.showToast('周辺の避難所を更新しました！');
+        this.showToast('避難所データを最新に更新しました');
       });
     }
 
+    // ソートタブ
     const sortRecommendBtn = document.getElementById('sort-recommend-btn');
     const sortDistanceBtn = document.getElementById('sort-distance-btn');
     if (sortRecommendBtn && sortDistanceBtn) {
       sortRecommendBtn.addEventListener('click', () => {
         sortRecommendBtn.classList.add('active');
         sortDistanceBtn.classList.remove('active');
-        this.activeFilter = 'recommend';
+        this.activeSort = 'recommend';
         this.renderPlacesList();
       });
       sortDistanceBtn.addEventListener('click', () => {
         sortDistanceBtn.classList.add('active');
         sortRecommendBtn.classList.remove('active');
-        this.activeFilter = 'distance';
+        this.activeSort = 'distance';
         this.renderPlacesList();
       });
     }
 
+    // スマートフィルターチップ (クイック絞り込み)
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        this.activeFilterChip = e.currentTarget.dataset.filter;
+        this.renderPlacesList();
+      });
+    });
+
+    // 地図センターボタン
     const btnMapCenter = document.getElementById('btn-map-center');
     if (btnMapCenter) {
       btnMapCenter.addEventListener('click', () => {
@@ -110,6 +118,7 @@ window.CoolNaviApp = {
       });
     }
 
+    // AR終了
     const btnCloseAR = document.getElementById('btn-close-ar');
     if (btnCloseAR) {
       btnCloseAR.addEventListener('click', () => {
@@ -118,18 +127,19 @@ window.CoolNaviApp = {
       });
     }
 
+    // ARカメラ/レーダー切替
     const btnToggleARCamera = document.getElementById('btn-toggle-ar-camera');
     if (btnToggleARCamera) {
       btnToggleARCamera.addEventListener('click', async () => {
         if (ARManager.isCameraActive) {
           ARManager.stopCamera();
           document.getElementById('ar-container').classList.add('radar-only-mode');
-          btnToggleARCamera.textContent = '📷 カメラを起動';
+          btnToggleARCamera.textContent = '📷 カメラビュー';
         } else {
           try {
             await ARManager.startCamera();
             document.getElementById('ar-container').classList.remove('radar-only-mode');
-            btnToggleARCamera.textContent = '🧭 レーダー画面に切替';
+            btnToggleARCamera.textContent = '🧭 2Dレーダー';
           } catch (e) {
             this.showToast('カメラを起動できませんでした');
           }
@@ -137,15 +147,17 @@ window.CoolNaviApp = {
       });
     }
 
+    // 道路ナビ/直線ナビ切替
     const btnToggleARMode = document.getElementById('btn-toggle-ar-mode');
     if (btnToggleARMode) {
       btnToggleARMode.addEventListener('click', () => {
         const newMode = ARManager.toggleNavMode();
-        btnToggleARMode.textContent = newMode === 'road' ? '🛣️ 道路ナビ中' : '📍 直線ナビ中';
-        this.showToast(newMode === 'road' ? '道路沿い交差点案内に切り替えました' : '直線案内に切り替えました');
+        btnToggleARMode.textContent = newMode === 'road' ? '🛣️ 道路交差点ナビ' : '📍 直線直感ナビ';
+        this.showToast(newMode === 'road' ? '交差点ターンバイターン案内に切り替えました' : '直線直感案内に切り替えました');
       });
     }
 
+    // モーダル
     document.querySelectorAll('.modal-close').forEach(btn => {
       btn.addEventListener('click', () => this.closeAllModals());
     });
@@ -155,12 +167,13 @@ window.CoolNaviApp = {
       });
     });
 
+    // 状況報告
     document.querySelectorAll('.report-choice-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const reportType = e.currentTarget.dataset.type;
         if (this.selectedPlace && reportType) {
           PlacesManager.addReport(this.selectedPlace.id, reportType);
-          this.showToast('ご報告ありがとうございます！反映しました。');
+          this.showToast('状況報告を受理しました。ありがとうございます！');
           this.closeAllModals();
           this.renderAllViews();
         }
@@ -168,37 +181,30 @@ window.CoolNaviApp = {
     });
   },
 
-  /**
-   * 現在地(GPS)を取得し、その緯度経度からリアルタイムに周辺避難施設を検索
-   */
   async refreshLocation(showFeedback = false) {
     const locStatusText = document.getElementById('current-location-status');
     const homeCard = document.getElementById('home-top-place-card');
-    const listContainer = document.getElementById('places-list-container');
 
-    if (locStatusText) locStatusText.innerHTML = '📍 <strong>GPSで現在地を取得中...</strong>';
+    if (locStatusText) locStatusText.innerHTML = '<span class="loc-spinner"></span> <strong>現在地GPSを高精度測位中...</strong>';
     if (homeCard) {
       homeCard.innerHTML = `
         <div class="loading-spinner-wrap">
-          <div class="spinner"></div>
-          <p>あなたの現在地周辺のクーリングシェルターを検索中...</p>
+          <div class="shimmer-circle"></div>
+          <p>あなたの周辺のクーリングシェルターを探索中...</p>
         </div>
       `;
     }
 
     try {
-      // 端末のリアルな現在地GPSを取得
       const position = await LocationManager.getCurrentPosition();
       this.currentLocation = position;
 
       if (locStatusText) {
-        locStatusText.innerHTML = `📍 <strong>現在地取得完了</strong> (精度 ±${Math.round(position.accuracy)}m)`;
+        locStatusText.innerHTML = `📍 <strong>現在地取得完了</strong> <span class="loc-acc">±${Math.round(position.accuracy)}m</span>`;
       }
 
-      // 地図の中心を現在地に移動
       MapManager.updateCurrentLocation(this.currentLocation, true);
 
-      // 現在地の座標周辺の避難施設と気象データをフェッチ
       await Promise.all([
         PlacesManager.fetchLiveWeather(position.latitude, position.longitude),
         PlacesManager.fetchPlacesByLocation(position.latitude, position.longitude)
@@ -208,19 +214,20 @@ window.CoolNaviApp = {
       this.renderWeather(this.weatherData);
       this.renderAllViews();
 
-      if (showFeedback) this.showToast('現在地周辺のクーリングシェルターを更新しました');
+      if (showFeedback) this.showToast('現在地のクーリングシェルターを更新しました');
     } catch (error) {
-      console.warn('現在地取得失敗:', error.message);
+      console.warn('現在地取得エラー:', error.message);
       if (locStatusText) {
-        locStatusText.innerHTML = `⚠️ <strong>位置情報が必要です</strong><br><small>ブラウザで位置情報を許可して更新ボタンを押してください</small>`;
+        locStatusText.innerHTML = `⚠️ <strong>位置情報の許可が必要です</strong>`;
       }
       if (homeCard) {
         homeCard.innerHTML = `
-          <div class="empty-list" style="padding: 20px; text-align: center;">
-            <p style="font-weight: 700; color: #B91C1C;">⚠️ 位置情報が許可されていません</p>
-            <p style="font-size: 0.8rem; color: #64748B; margin-top: 6px;">あなたの近くのクーリングシェルターを探すには、位置情報（GPS）の利用を許可してください。</p>
-            <button class="btn-primary" style="margin: 14px auto 0; width: auto; padding: 8px 18px;" onclick="window.CoolNaviApp.refreshLocation(true)">
-              🔄 再度位置情報を許可して探す
+          <div class="empty-list-card">
+            <div class="empty-icon">📍</div>
+            <h4>位置情報の利用が許可されていません</h4>
+            <p>あなたのすぐ近くにあるクーリングシェルターを探すため、ブラウザ設定で位置情報を「許可」してください。</p>
+            <button class="btn-primary-glow" onclick="window.CoolNaviApp.refreshLocation(true)">
+              🔄 再試行する
             </button>
           </div>
         `;
@@ -235,20 +242,20 @@ window.CoolNaviApp = {
     const maxTempEl = document.getElementById('weather-max-temp');
     const alertEl = document.getElementById('weather-alert-badge');
     const msgEl = document.getElementById('weather-message');
-    const sourceEl = document.getElementById('weather-source-badge');
+    const humidityEl = document.getElementById('weather-humidity');
+    const wbgtEl = document.getElementById('weather-wbgt');
 
     if (tempEl) tempEl.textContent = `${weather.currentTemp}℃`;
-    if (maxTempEl) maxTempEl.textContent = `最高 ${weather.maxTemp}℃ (湿度 ${weather.humidity || 65}%)`;
+    if (maxTempEl) maxTempEl.textContent = `最高 ${weather.maxTemp}℃`;
+    if (humidityEl) humidityEl.textContent = `${weather.humidity || 65}%`;
+    if (wbgtEl) wbgtEl.textContent = `${weather.wbgt || 29}℃`;
+
     if (alertEl) {
-      alertEl.textContent = `⚠️ 熱中症: ${weather.heatStrokeAlert}`;
-      alertEl.className = weather.heatStrokeAlert.includes('危険') ? 'weather-alert danger-high' :
-                          weather.heatStrokeAlert.includes('厳重') ? 'weather-alert danger' : 'weather-alert';
+      alertEl.textContent = weather.heatStrokeAlert;
+      alertEl.className = weather.heatStrokeAlert.includes('危険') ? 'weather-alert danger-high pulse-glow' :
+                          weather.heatStrokeAlert.includes('厳重') ? 'weather-alert danger pulse-glow' : 'weather-alert pulse-glow';
     }
     if (msgEl) msgEl.textContent = weather.message;
-    if (sourceEl && weather.isLive) {
-      sourceEl.textContent = '気象オープンデータ (Live)';
-      sourceEl.style.display = 'inline-block';
-    }
   },
 
   renderAllViews() {
@@ -263,38 +270,68 @@ window.CoolNaviApp = {
     if (!cardEl) return;
 
     if (!topPlace) {
-      cardEl.innerHTML = '<p class="empty-text">現在地周辺のクーリングシェルターを検索中...</p>';
+      cardEl.innerHTML = '<p class="empty-text">現在地周辺のクーリングシェルターを探索中...</p>';
       return;
     }
 
     const evalData = topPlace.evaluation;
+    // 太陽日陰アドバイス
+    const bearing = calculateBearing(this.currentLocation.latitude, this.currentLocation.longitude, topPlace.latitude, topPlace.longitude);
+    const shade = getShadeAdvice(bearing, this.currentLocation.latitude, this.currentLocation.longitude);
+
     cardEl.innerHTML = `
-      <div class="top-place-header">
-        <span class="recommend-badge-ribbon">🏛️ あなたの現在地から一番近い避難所</span>
-        <span class="badge ${evalData.badgeClass}">${evalData.rank}</span>
-      </div>
-      <h3 class="top-place-name">${topPlace.name}</h3>
-      <div class="top-place-meta">
-        <span class="meta-dist">🚶 <strong>徒歩 約${evalData.walkingMinutes}分</strong> (${evalData.formattedDistance})</span>
-        <span class="meta-status">定員: 約${topPlace.capacity || 50}名</span>
-      </div>
-      <div class="feature-tags-row">
-        ${evalData.tags.map(tag => `<span class="tag-pill">${tag}</span>`).join('')}
-        ${topPlace.waterDispenser ? '<span class="tag-pill water">💧 給水可</span>' : ''}
-      </div>
-      <p class="top-place-desc">${topPlace.description}</p>
-      ${topPlace.recentReport ? `
-        <div class="recent-report-notice">
-          💬 直近の状況報告: <strong>${topPlace.recentReport.label}</strong> (${topPlace.recentReport.timeFormatted})
+      <div class="top-place-glass">
+        <div class="top-place-ribbon">
+          <span class="ribbon-glow">🥇 最優先避難シェルター</span>
+          <span class="score-badge">${evalData.score}点</span>
         </div>
-      ` : ''}
-      <div class="top-place-actions">
-        <button class="btn-primary" onclick="window.CoolNaviApp.startARForPlace('${topPlace.id}')">
-          🧭 道路沿いARで避難案内
-        </button>
-        <button class="btn-secondary" onclick="window.CoolNaviApp.showPlaceDetail('${topPlace.id}')">
-          施設詳細・評価
-        </button>
+
+        <h3 class="top-place-name">${topPlace.name}</h3>
+
+        <div class="top-place-metrics">
+          <div class="metric-col">
+            <span class="metric-val">約${evalData.walkingMinutes}<small>分</small></span>
+            <span class="metric-lbl">徒歩所要時間</span>
+          </div>
+          <div class="metric-col">
+            <span class="metric-val">${evalData.formattedDistance}</span>
+            <span class="metric-lbl">実歩行距離</span>
+          </div>
+          <div class="metric-col">
+            <span class="metric-val">${topPlace.capacity || 50}<small>名</small></span>
+            <span class="metric-lbl">受入定員</span>
+          </div>
+        </div>
+
+        <!-- 日陰歩行アシストバナー -->
+        <div class="shade-advice-pill">
+          <span class="shade-icon">☂️</span>
+          <span class="shade-text"><strong>日陰ナビ:</strong> ${shade.text}</span>
+        </div>
+
+        <div class="feature-tags-glow">
+          <span class="tag-pill-glow ac">❄️ 強冷房</span>
+          ${topPlace.waterDispenser ? '<span class="tag-pill-glow water">💧 無料給水</span>' : ''}
+          <span class="tag-pill-glow seat">🪑 休憩席</span>
+          <span class="tag-pill-glow public">🏛️ 公的指定</span>
+        </div>
+
+        <p class="top-place-desc">${topPlace.description}</p>
+
+        ${topPlace.recentReport ? `
+          <div class="recent-report-chip">
+            💬 直近の状況: <strong>${topPlace.recentReport.label}</strong> (${topPlace.recentReport.timeFormatted})
+          </div>
+        ` : ''}
+
+        <div class="top-place-actions">
+          <button class="btn-primary-glow" onclick="window.CoolNaviApp.startARForPlace('${topPlace.id}')">
+            🧭 道路沿いARで避難誘導
+          </button>
+          <button class="btn-secondary-glass" onclick="window.CoolNaviApp.showPlaceDetail('${topPlace.id}')">
+            詳細・設備
+          </button>
+        </div>
       </div>
     `;
   },
@@ -303,10 +340,21 @@ window.CoolNaviApp = {
     const listEl = document.getElementById('places-list-container');
     if (!listEl) return;
 
-    const evaluatedList = PlacesManager.getEvaluatedPlaces(this.currentLocation, this.activeFilter);
+    let evaluatedList = PlacesManager.getEvaluatedPlaces(this.currentLocation, this.activeSort);
+
+    // フィルターチップによる絞り込み
+    if (this.activeFilterChip === 'cool') {
+      evaluatedList = evaluatedList.filter(p => p.airConditioner);
+    } else if (this.activeFilterChip === 'water') {
+      evaluatedList = evaluatedList.filter(p => p.waterDispenser);
+    } else if (this.activeFilterChip === 'seat') {
+      evaluatedList = evaluatedList.filter(p => p.seat);
+    } else if (this.activeFilterChip === 'empty') {
+      evaluatedList = evaluatedList.filter(p => p.crowdLevel === 'low');
+    }
 
     if (evaluatedList.length === 0) {
-      listEl.innerHTML = '<div class="empty-list">周辺のクーリングシェルターを検索中...</div>';
+      listEl.innerHTML = '<div class="empty-list-card"><p>条件に一致する避難所が見つかりませんでした。</p></div>';
       return;
     }
 
@@ -316,44 +364,48 @@ window.CoolNaviApp = {
       const rankIcon = rankNumber === 1 ? '🥇' : rankNumber === 2 ? '🥈' : rankNumber === 3 ? '🥉' : `${rankNumber}.`;
 
       return `
-        <div class="place-card ${place.coolingShelter ? 'card-shelter' : ''}" data-id="${place.id}">
+        <div class="place-glass-card" data-id="${place.id}">
           <div class="place-card-top">
-            <span class="place-rank-number">${rankIcon}</span>
+            <span class="place-rank-badge">${rankIcon}</span>
             <div class="place-title-wrap">
               <h4 class="place-name">${place.name}</h4>
               <div class="place-sub-badges">
-                <span class="place-badge ${evalData.badgeClass}">${evalData.rank}</span>
-                <span class="shelter-authority-pill">${place.designatedAuthority || '公的避難施設'}</span>
+                <span class="badge-cooling-score">冷却指数 ${evalData.score}%</span>
+                <span class="shelter-authority-pill">${place.designatedAuthority || '指定避難施設'}</span>
               </div>
             </div>
           </div>
-          <div class="place-distance-bar">
-            <span class="place-dist-val">徒歩 <strong>約${evalData.walkingMinutes}分</strong></span>
-            <span class="place-dist-meters">約${evalData.formattedDistance}</span>
-            <span class="place-crowd-tag crowd-${place.crowdLevel}">
-              ${place.crowdLevel === 'low' ? '🟢 ゆったり休める' : place.crowdLevel === 'medium' ? '🟡 適度な混雑' : '🔴 混雑気味'}
+
+          <div class="place-metrics-bar">
+            <span class="metric-dist">🚶 <strong>約${evalData.walkingMinutes}分</strong> (${evalData.formattedDistance})</span>
+            <span class="metric-capacity">定員: ${place.capacity || 50}名</span>
+            <span class="crowd-status crowd-${place.crowdLevel}">
+              ${place.crowdLevel === 'low' ? '🟢 ゆったり快適' : place.crowdLevel === 'medium' ? '🟡 適度な混雑' : '🔴 やや混雑'}
             </span>
           </div>
-          <div class="feature-tags-row">
-            ${place.airConditioner ? '<span class="tag-pill">❄️ 強冷房</span>' : ''}
-            ${place.seat ? '<span class="tag-pill">🪑 休憩座席</span>' : ''}
-            ${place.waterDispenser ? '<span class="tag-pill water">💧 冷水・給水機</span>' : ''}
-            ${place.toilet ? '<span class="tag-pill">🚻 トイレ</span>' : ''}
+
+          <div class="feature-tags-glow mini">
+            <span class="tag-pill-glow ac">❄️ 冷房</span>
+            ${place.waterDispenser ? '<span class="tag-pill-glow water">💧 給水</span>' : ''}
+            <span class="tag-pill-glow seat">🪑 座席</span>
+            ${place.toilet ? '<span class="tag-pill-glow">🚻 トイレ</span>' : ''}
           </div>
+
           ${place.recentReport ? `
-            <div class="recent-report-notice compact">
-              💬 直近の状況: <strong>${place.recentReport.label}</strong>
+            <div class="recent-report-chip compact">
+              💬 状況: <strong>${place.recentReport.label}</strong>
             </div>
           ` : ''}
+
           <div class="place-card-actions">
-            <button class="card-btn secondary" onclick="window.CoolNaviApp.showPlaceDetail('${place.id}')">
+            <button class="card-btn-glass" onclick="window.CoolNaviApp.showPlaceDetail('${place.id}')">
               詳細
             </button>
-            <button class="card-btn outline" onclick="window.CoolNaviApp.showOnMap('${place.id}')">
-              🗺️ 避難ルート
+            <button class="card-btn-glass outline" onclick="window.CoolNaviApp.showOnMap('${place.id}')">
+              🗺️ 経路
             </button>
-            <button class="card-btn primary" onclick="window.CoolNaviApp.startARForPlace('${place.id}')">
-              🧭 AR案内
+            <button class="card-btn-glow" onclick="window.CoolNaviApp.startARForPlace('${place.id}')">
+              🧭 ARナビ
             </button>
           </div>
         </div>
@@ -419,20 +471,22 @@ window.CoolNaviApp = {
     const evalData = place.evaluation || calculateRecommendationScore(place, this.currentLocation);
 
     banner.innerHTML = `
-      <div class="map-banner-header">
-        <div>
-          <h4>${place.name}</h4>
-          <span class="meta">🚶 道路沿い歩行 約${evalData.walkingMinutes}分 (${evalData.formattedDistance}) / 定員: ${place.capacity || 50}名</span>
+      <div class="map-banner-glass">
+        <div class="map-banner-header">
+          <div>
+            <h4>${place.name}</h4>
+            <span class="meta">🚶 道路歩行 約${evalData.walkingMinutes}分 (${evalData.formattedDistance}) / 定員: ${place.capacity || 50}名</span>
+          </div>
+          <button class="banner-close-btn" onclick="document.getElementById('map-bottom-banner').classList.remove('active')">✕</button>
         </div>
-        <button class="banner-close-btn" onclick="document.getElementById('map-bottom-banner').classList.remove('active')">✕</button>
-      </div>
-      <div class="map-banner-actions">
-        <button class="btn-primary" onclick="window.CoolNaviApp.startARForPlace('${place.id}')">
-          🧭 道路沿いARで避難案内
-        </button>
-        <button class="btn-secondary" onclick="window.CoolNaviApp.showPlaceDetail('${place.id}')">
-          詳細
-        </button>
+        <div class="map-banner-actions">
+          <button class="btn-primary-glow" onclick="window.CoolNaviApp.startARForPlace('${place.id}')">
+            🧭 道路沿いARで避難開始
+          </button>
+          <button class="btn-secondary-glass" onclick="window.CoolNaviApp.showPlaceDetail('${place.id}')">
+            施設詳細
+          </button>
+        </div>
       </div>
     `;
     banner.classList.add('active');
@@ -467,79 +521,94 @@ window.CoolNaviApp = {
     const modalBody = document.getElementById('modal-place-detail-body');
     if (!modalBody) return;
 
-    const distScore = evalData.distance <= 100 ? 35 : evalData.distance <= 300 ? 30 : evalData.distance <= 600 ? 24 : evalData.distance <= 1000 ? 15 : 8;
+    const distScore = evalData.distance <= 150 ? 35 : evalData.distance <= 350 ? 30 : evalData.distance <= 700 ? 24 : evalData.distance <= 1200 ? 15 : 8;
     const acScore = place.airConditioner ? 25 : 0;
-    const csScore = place.coolingShelter ? 10 : 0;
+    const csScore = place.coolingShelter ? 15 : 0;
     const seatScore = place.seat ? 10 : 0;
     const waterScore = place.waterDispenser ? 5 : 0;
-    const crowdScore = place.crowdLevel === 'low' ? 5 : place.crowdLevel === 'medium' ? 3 : 0;
 
     modalBody.innerHTML = `
-      <div class="detail-header">
-        <div class="shelter-pill-badge">🏛️ 指定暑熱避難施設 (${place.designatedAuthority || '公的指定'})</div>
+      <div class="detail-header-glass">
+        <div class="shelter-badge-glow">🏛️ ${place.designatedAuthority || '指定暑熱避難施設'}</div>
         <h2>${place.name}</h2>
-        <div class="detail-distance-badge">
-          🚶 徒歩 約<strong>${evalData.walkingMinutes}分</strong> (約${evalData.formattedDistance}) / 受入定員: <strong>${place.capacity || 50}名</strong>
+        <div class="detail-meta-row">
+          <span>🚶 徒歩 約<strong>${evalData.walkingMinutes}分</strong> (${evalData.formattedDistance})</span>
+          <span>受入定員: <strong>${place.capacity || 50}名</strong></span>
         </div>
       </div>
 
-      <div class="detail-section score-breakdown-section">
-        <h4>📊 休みやすさ・避難適合スコア: ${evalData.score}点</h4>
-        <div class="score-bars">
+      <div class="detail-section glass-box">
+        <h4>📊 冷却・避難適合指数: <strong>${evalData.score}点</strong></h4>
+        <div class="score-bars-glow">
           <div class="score-bar-row">
-            <span class="bar-label">近さ (${distScore}/35点)</span>
-            <div class="bar-track"><div class="bar-fill" style="width: ${(distScore/35)*100}%;"></div></div>
+            <div class="score-label-flex">
+              <span>距離・近さ</span>
+              <span>${distScore}/35点</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill dist" style="width: ${(distScore/35)*100}%;"></div></div>
           </div>
           <div class="score-bar-row">
-            <span class="bar-label">冷房 (${acScore}/25点)</span>
+            <div class="score-label-flex">
+              <span>強冷房設備</span>
+              <span>${acScore}/25点</span>
+            </div>
             <div class="bar-track"><div class="bar-fill ac" style="width: ${(acScore/25)*100}%;"></div></div>
           </div>
           <div class="score-bar-row">
-            <span class="bar-label">公的指定・座席 (${csScore + seatScore}/20点)</span>
-            <div class="bar-track"><div class="bar-fill seat" style="width: ${((csScore + seatScore)/20)*100}%;"></div></div>
+            <div class="score-label-flex">
+              <span>公的指定・座席</span>
+              <span>${csScore + seatScore}/25点</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill seat" style="width: ${((csScore + seatScore)/25)*100}%;"></div></div>
           </div>
           <div class="score-bar-row">
-            <span class="bar-label">給水・混雑ゆとり (${waterScore + crowdScore}/10点)</span>
-            <div class="bar-track"><div class="bar-fill crowd" style="width: ${((waterScore + crowdScore)/10)*100}%;"></div></div>
+            <div class="score-label-flex">
+              <span>冷水給水</span>
+              <span>${waterScore}/5点</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill water" style="width: ${(waterScore/5)*100}%;"></div></div>
           </div>
         </div>
       </div>
 
-      <div class="detail-section">
+      <div class="detail-section glass-box">
         <h4>🏢 シェルター設備</h4>
-        <div class="detail-grid">
-          <div class="grid-item ${place.airConditioner ? 'checked' : 'cross'}">
-            ${place.airConditioner ? '✅' : '❌'} 強冷房設備
+        <div class="detail-grid-modern">
+          <div class="grid-pill ${place.airConditioner ? 'active' : ''}">
+            <span class="icon">❄️</span>
+            <span class="text">強冷房完備</span>
           </div>
-          <div class="grid-item ${place.seat ? 'checked' : 'cross'}">
-            ${place.seat ? '✅' : '❌'} 休憩座席・ソファー
+          <div class="grid-pill ${place.seat ? 'active' : ''}">
+            <span class="icon">🪑</span>
+            <span class="text">休憩ソファー・座席</span>
           </div>
-          <div class="grid-item ${place.waterDispenser ? 'checked' : 'cross'}">
-            ${place.waterDispenser ? '✅' : '❌'} 冷水機・給水スポット
+          <div class="grid-pill ${place.waterDispenser ? 'active' : ''}">
+            <span class="icon">💧</span>
+            <span class="text">無料冷水・給水機</span>
           </div>
-          <div class="grid-item ${place.toilet ? 'checked' : 'cross'}">
-            ${place.toilet ? '✅' : '❌'} トイレ完備
+          <div class="grid-pill ${place.toilet ? 'active' : ''}">
+            <span class="icon">🚻</span>
+            <span class="text">公衆トイレ完備</span>
           </div>
         </div>
       </div>
 
-      <div class="detail-section">
-        <h4>ℹ️ 基本情報 (オープンデータ)</h4>
-        <table class="detail-info-table">
-          <tr><th>施設種別</th><td>${place.facilityType || '公共指定避難施設'}</td></tr>
-          <tr><th>住所</th><td>${place.address}</td></tr>
-          <tr><th>受入可能時間</th><td>${place.openingHours}</td></tr>
-          <tr><th>受入可能人数</th><td>約${place.capacity || 50}名</td></tr>
-          <tr><th>指定自治体</th><td>${place.designatedAuthority || '公的機関'}</td></tr>
+      <div class="detail-section glass-box">
+        <h4>ℹ️ 施設概要</h4>
+        <table class="detail-table-clean">
+          <tr><th>施設種別</th><td>${place.facilityType || '指定暑熱避難所'}</td></tr>
+          <tr><th>所在地</th><td>${place.address}</td></tr>
+          <tr><th>受入時間</th><td>${place.openingHours}</td></tr>
+          <tr><th>受入定員</th><td>約${place.capacity || 50}名</td></tr>
         </table>
-        <p class="detail-desc-text">${place.description}</p>
+        <p class="detail-desc-box">${place.description}</p>
       </div>
 
-      <div class="detail-section">
+      <div class="detail-section glass-box">
         <div class="report-header-flex">
-          <h4>💬 現在の状況報告</h4>
-          <button class="btn-sm-report" onclick="window.CoolNaviApp.openReportModal()">
-            ＋ 状況を報告する
+          <h4>💬 現在の利用状況報告</h4>
+          <button class="btn-sm-report-glow" onclick="window.CoolNaviApp.openReportModal()">
+            ＋ 状況を投稿
           </button>
         </div>
         ${reports.length > 0 ? `
@@ -552,15 +621,15 @@ window.CoolNaviApp = {
             `).join('')}
           </div>
         ` : `
-          <p class="empty-reports-text">まだ報告がありません。利用した状況を投稿してみましょう！</p>
+          <p class="empty-reports-text">直近の報告はありません。利用された際はぜひ状況を共有してください。</p>
         `}
       </div>
 
       <div class="detail-actions-fixed">
-        <button class="btn-primary" onclick="window.CoolNaviApp.startARForPlace('${place.id}')">
-          🧭 道路沿いARで避難案内
+        <button class="btn-primary-glow" onclick="window.CoolNaviApp.startARForPlace('${place.id}')">
+          🧭 道路沿いARで避難誘導
         </button>
-        <button class="btn-secondary" onclick="window.CoolNaviApp.showOnMap('${place.id}')">
+        <button class="btn-secondary-glass" onclick="window.CoolNaviApp.showOnMap('${place.id}')">
           🗺️ 避難経路
         </button>
       </div>
@@ -601,7 +670,7 @@ window.CoolNaviApp = {
         );
         this.currentRoute = route;
       } catch (e) {
-        console.warn('AR用ルート取得エラー:', e);
+        console.warn('ARルート取得エラー:', e);
       }
     }
 
@@ -614,11 +683,11 @@ window.CoolNaviApp = {
 
       if (!result.camera) {
         container.classList.add('radar-only-mode');
-        if (toggleBtn) toggleBtn.textContent = '📷 カメラを起動';
-        this.showToast('カメラ映像なしで道路方向案内を表示します');
+        if (toggleBtn) toggleBtn.textContent = '📷 カメラビュー';
+        this.showToast('2Dレーダーモードで避難方向を案内します');
       } else {
         container.classList.remove('radar-only-mode');
-        if (toggleBtn) toggleBtn.textContent = '🧭 レーダー画面に切替';
+        if (toggleBtn) toggleBtn.textContent = '🧭 2Dレーダー';
       }
     } catch (e) {
       console.warn('AR起動例外:', e);
@@ -627,11 +696,14 @@ window.CoolNaviApp = {
 
   renderAROverlay(state) {
     const arrowEl = document.getElementById('ar-direction-arrow');
+    const targetRing = document.getElementById('ar-target-ring');
     const distEl = document.getElementById('ar-distance-text');
     const walkEl = document.getElementById('ar-walking-text');
     const guideEl = document.getElementById('ar-guide-message');
     const compassHeadingEl = document.getElementById('ar-compass-heading');
     const radarIndicator = document.getElementById('radar-target-dot');
+    const horizonBar = document.getElementById('ar-horizon-bar');
+    const shadeBanner = document.getElementById('ar-shade-banner');
 
     const turnCard = document.getElementById('ar-turn-card');
     const turnIconEl = document.getElementById('ar-turn-icon');
@@ -639,15 +711,24 @@ window.CoolNaviApp = {
     const turnStepEl = document.getElementById('ar-turn-step-count');
     const floatingPin = document.getElementById('ar-floating-pin');
 
+    // 1. 中央コンパス矢印の回転 & ロックオン発光
     if (arrowEl) {
       arrowEl.style.transform = `rotate(${state.relativeAngle}deg)`;
       if (state.isStraight) {
-        arrowEl.classList.add('straight-forward');
+        arrowEl.classList.add('locked-on');
+        if (targetRing) targetRing.classList.add('locked-on');
       } else {
-        arrowEl.classList.remove('straight-forward');
+        arrowEl.classList.remove('locked-on');
+        if (targetRing) targetRing.classList.remove('locked-on');
       }
     }
 
+    // 2. ジャイロ地平線インジケーター (ロール傾きに追従)
+    if (horizonBar) {
+      horizonBar.style.transform = `rotate(${-state.roll}deg) translateY(${state.screenYPercent * 2}px)`;
+    }
+
+    // 3. ターンバイターン指示カード
     if (turnCard && state.currentStepInfo) {
       turnCard.style.display = 'flex';
       if (turnIconEl) turnIconEl.textContent = state.turnIcon;
@@ -657,10 +738,16 @@ window.CoolNaviApp = {
       }
     }
 
+    // 4. 日陰アシストバナー
+    if (shadeBanner && state.shadeAdvice) {
+      shadeBanner.textContent = `☂️ ${state.shadeAdvice.text}`;
+    }
+
+    // 5. 3D空間浮遊ピン
     if (floatingPin) {
       if (state.isVisibleInScreen && state.isCameraActive) {
         floatingPin.style.display = 'flex';
-        floatingPin.style.transform = `translate(${state.screenXPercent * 3.5}px, ${state.screenYPercent * 2}px)`;
+        floatingPin.style.transform = `translate(${state.screenXPercent * 3.8}px, ${state.screenYPercent * 2.2}px)`;
         const pinTitle = floatingPin.querySelector('.pin-title');
         const pinDist = floatingPin.querySelector('.pin-dist');
         if (pinTitle) pinTitle.textContent = state.destination.name;
@@ -670,22 +757,16 @@ window.CoolNaviApp = {
       }
     }
 
-    if (distEl) {
-      distEl.textContent = `あと ${state.formattedFinalDistance}`;
-    }
-    if (walkEl) {
-      walkEl.textContent = `徒歩 約${state.walkingMinutes}分 (道路沿い)`;
-    }
-    if (guideEl) {
-      guideEl.textContent = `${state.turnIcon} ${state.directionText}`;
-    }
+    if (distEl) distEl.textContent = `あと ${state.formattedFinalDistance}`;
+    if (walkEl) walkEl.textContent = `徒歩 約${state.walkingMinutes}分`;
+    if (guideEl) guideEl.textContent = state.directionText;
     if (compassHeadingEl) {
-      compassHeadingEl.textContent = `端末方位: ${Math.round(state.heading)}° / 避難交差点: ${Math.round(state.targetBearing)}°`;
+      compassHeadingEl.textContent = `HEADING ${Math.round(state.heading)}° | BEARING ${Math.round(state.targetBearing)}°`;
     }
 
     if (radarIndicator) {
       const rad = (state.relativeAngle - 90) * (Math.PI / 180);
-      const radius = 60;
+      const radius = 64;
       const x = Math.cos(rad) * radius;
       const y = Math.sin(rad) * radius;
       radarIndicator.style.transform = `translate(${x}px, ${y}px)`;
