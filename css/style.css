@@ -893,12 +893,17 @@ body {
   cursor: pointer;
 }
 
-/* ================= 3. 地図画面 (CartoDB Dark Matter 連動) ================= */
+/* ================= 3. 地図画面 (OpenStreetMap 公式 × シックダークフィルター) ================= */
 .leaflet-container {
   width: 100% !important;
   height: 100% !important;
   background: #0B0E14 !important;
   font-family: inherit !important;
+}
+
+/* APIキー不要の公式 OpenStreetMap をシックで高級感あるダーク調に変換 */
+.leaflet-tile {
+  filter: brightness(0.65) invert(1) contrast(2.8) hue-rotate(200deg) saturate(0.25) brightness(0.85);
 }
 
 #map-container {

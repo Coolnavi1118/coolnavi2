@@ -33,25 +33,13 @@ const MapManager = {
 
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
-    // 1. シックで上質な CartoDB Dark Matter タイル
-    const darkTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // 完全無料・APIキー不要の公式 OpenStreetMap タイル (CSSフィルターでシックなダークテーマに描画)
+    const osmTile = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd',
-      attribution: '&copy; CARTO &copy; OpenStreetMap'
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     });
 
-    // 2. 万一の読み込みエラー時は標準 OpenStreetMap タイルへ自動フォールバック
-    darkTile.on('tileerror', () => {
-      console.warn("CartoDB タイル取得失敗。OSM 標準タイルへ切り替えます。");
-      if (!this.osmFallbackTile) {
-        this.osmFallbackTile = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(this.map);
-      }
-    });
-
-    darkTile.addTo(this.map);
+    osmTile.addTo(this.map);
     this.routeLayerGroup = L.layerGroup().addTo(this.map);
     this.isInitialized = true;
 
@@ -277,20 +265,12 @@ const HomeMiniMap = {
       scrollWheelZoom: false
     });
 
-    const darkTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      subdomains: 'abcd'
+    // 完全無料・APIキー不要の公式 OpenStreetMap タイル
+    const osmTile = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
     });
 
-    darkTile.on('tileerror', () => {
-      if (!this.osmFallbackTile) {
-        this.osmFallbackTile = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19
-        }).addTo(this.map);
-      }
-    });
-
-    darkTile.addTo(this.map);
+    osmTile.addTo(this.map);
 
     if (onClick) {
       this.map.on('click', onClick);
