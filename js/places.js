@@ -212,34 +212,116 @@ const PlacesManager = {
     ];
   },
 
+  /**
+   * 現在の季節・月日・時間帯に応じた現実的な推定気象を算出 (フォールバック用)
+   */
+  getSeasonalFallbackWeather() {
+    const now = new Date();
+    const month = now.getMonth() + 1; // 1〜12
+    const hour = now.getHours();
+
+    let baseTemp = 16;
+    let humidity = 55;
+
+    // 日本の月別平均気温モデル
+    if (month >= 7 && month <= 8) {
+      baseTemp = 31; // 真夏
+      humidity = 70;
+    } else if (month === 6 || month === 9) {
+      baseTemp = 25; // 初夏・初秋
+      humidity = 68;
+    } else if (month === 5 || month === 10) {
+      baseTemp = 20; // 晩春・仲秋
+      humidity = 60;
+    } else if (month === 4 || month === 11) {
+      baseTemp = 15; // 春・晩秋 (11月は14〜17℃前後)
+      humidity = 55;
+    } else {
+      baseTemp = 9;  // 冬 (12月〜3月)
+      humidity = 48;
+    }
+
+    // 昼夜の温度変化 (昼14時は+3℃、早朝5時は-3℃)
+    if (hour >= 11 && hour <= 15) {
+      baseTemp += 2;
+    } else if (hour >= 0 && hour <= 6) {
+      baseTemp -= 3;
+    }
+
+    const currentTemp = Math.round(baseTemp);
+    const maxTemp = currentTemp + 3;
+    const estWbgt = Math.round(0.735 * currentTemp + 0.0374 * humidity + (0.00292 * currentTemp * humidity) - 4);
+
+    let heatStrokeAlert = "快適 / 低リスク";
+    let message = "現在は涼しく過ごしやすい気温です。万が一の暑さに備えて周辺の避難所を把握しておきましょう。";
+
+    if (currentTemp >= 35 || estWbgt >= 31) {
+      heatStrokeAlert = "危険（原則運動中止）";
+      message = "極めて危険な猛暑です。今すぐ最寄りのクーリングシェルターへ避難してください。";
+    } else if (currentTemp >= 31 || estWbgt >= 28) {
+      heatStrokeAlert = "厳重警戒（外出要注意）";
+      message = "「まだ大丈夫」と我慢せず、すぐ近くのクーリングシェルターで涼みましょう。";
+    } else if (currentTemp >= 28 || estWbgt >= 25) {
+      heatStrokeAlert = "警戒（熱中症リスク）";
+      message = "喉が渇く前に、近くの避難スポットで定期的に体を冷やしましょう。";
+    } else if (currentTemp >= 24 || estWbgt >= 21) {
+      heatStrokeAlert = "注意（水分補給）";
+      message = "活動時はこまめに水分・塩分を補給し、無理のない休憩を。";
+    }
+
+    return {
+      currentTemp,
+      maxTemp,
+      humidity,
+      heatStrokeAlert,
+      wbgt: Math.max(estWbgt, 10),
+      message,
+      isLive: false,
+      lastUpdated: "季節推計値 (オフライン)"
+    };
+  },
+
   async fetchLiveWeather(lat, lon) {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code&daily=temperature_2m_max&timezone=auto`;
 
+    // Safari 互換性を完全保証する AbortController タイムアウト (8秒)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       if (!response.ok) throw new Error(`Weather API Error: ${response.status}`);
 
       const data = await response.json();
+      if (!data || !data.current || typeof data.current.temperature_2m !== 'number') {
+        throw new Error("無効な気象データ構造");
+      }
+
       const currentTemp = Math.round(data.current.temperature_2m);
-      const humidity = Math.round(data.current.relative_humidity_2m);
-      const maxTemp = (data.daily && data.daily.temperature_2m_max && data.daily.temperature_2m_max[0])
+      const humidity = Math.round(data.current.relative_humidity_2m ?? 55);
+      const maxTemp = (data.daily && data.daily.temperature_2m_max && typeof data.daily.temperature_2m_max[0] === 'number')
         ? Math.round(data.daily.temperature_2m_max[0])
         : currentTemp + 2;
 
       const estWbgt = Math.round(0.735 * currentTemp + 0.0374 * humidity + (0.00292 * currentTemp * humidity) - 4);
 
-      let heatStrokeAlert = "注意";
-      let message = "こまめな水分補給と冷房のある場所での休憩を。";
+      let heatStrokeAlert = "快適 / 低リスク";
+      let message = "現在は過ごしやすい気候です。もしもの暑さに備えて近くのクーリングシェルターを確認しておきましょう。";
 
       if (currentTemp >= 35 || estWbgt >= 31) {
         heatStrokeAlert = "危険（原則運動中止）";
-        message = "屋外の直射日光は極めて危険です。今すぐ近くのクーリングシェルターへ避難してください。";
+        message = "極めて危険な猛暑です。今すぐ近くのクーリングシェルターへ避難してください。";
       } else if (currentTemp >= 31 || estWbgt >= 28) {
         heatStrokeAlert = "厳重警戒（外出要注意）";
         message = "「まだ大丈夫」と我慢せず、すぐ近くのクーリングシェルターで涼みましょう。";
       } else if (currentTemp >= 28 || estWbgt >= 25) {
         heatStrokeAlert = "警戒（熱中症リスク）";
         message = "喉が渇く前に、近くの避難スポットで定期的に体を冷やしましょう。";
+      } else if (currentTemp >= 24 || estWbgt >= 21) {
+        heatStrokeAlert = "注意（水分補給）";
+        message = "活動時はこまめに水分・塩分を補給し、適度に冷房下で休憩してください。";
       }
 
       this.weather = {
@@ -247,23 +329,16 @@ const PlacesManager = {
         maxTemp,
         humidity,
         heatStrokeAlert,
-        wbgt: estWbgt,
+        wbgt: Math.max(estWbgt, 10),
         message,
         isLive: true,
         lastUpdated: "気象オープンデータ (Live)"
       };
       return this.weather;
     } catch (err) {
-      console.warn("気象APIエラー:", err.message);
-      this.weather = {
-        currentTemp: 32,
-        maxTemp: 35,
-        humidity: 65,
-        heatStrokeAlert: "厳重警戒",
-        wbgt: 29,
-        message: "「まだ大丈夫」と我慢せず、早めにクーリングシェルターでクールダウンしましょう。",
-        lastUpdated: "推定値"
-      };
+      clearTimeout(timeoutId);
+      console.warn("リアルタイム気象API取得失敗・フォールバック実行:", err.message);
+      this.weather = this.getSeasonalFallbackWeather();
       return this.weather;
     }
   },

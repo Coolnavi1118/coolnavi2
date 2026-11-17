@@ -18,6 +18,10 @@ window.CoolNaviApp = {
       this.onPlaceMarkerClicked(place);
     });
 
+    HomeMiniMap.init('home-mini-map', () => {
+      this.switchTab('map');
+    });
+
     const arVideo = document.getElementById('ar-video');
     ARManager.init(arVideo, (state) => {
       this.renderAROverlay(state);
@@ -260,8 +264,15 @@ window.CoolNaviApp = {
 
   renderAllViews() {
     this.renderHomeTopPlace();
+    this.renderHomeMiniMap();
     this.renderPlacesList();
     this.renderMapPlaces();
+  },
+
+  renderHomeMiniMap() {
+    if (!this.currentLocation) return;
+    const list = PlacesManager.getEvaluatedPlaces(this.currentLocation, 'recommend');
+    HomeMiniMap.update(this.currentLocation, list);
   },
 
   renderHomeTopPlace() {
@@ -435,10 +446,19 @@ window.CoolNaviApp = {
     });
 
     if (tabName === 'map') {
-      MapManager.invalidateSize();
+      MapManager.invalidateSize(true);
       if (this.selectedPlace) {
         this.loadAndDrawRoute(this.selectedPlace);
+      } else if (this.currentLocation) {
+        const top = PlacesManager.getTopRecommendedPlace(this.currentLocation);
+        if (top) {
+          this.selectedPlace = top;
+          this.showMapPlaceBanner(top);
+          this.loadAndDrawRoute(top);
+        }
       }
+    } else if (tabName === 'home') {
+      HomeMiniMap.invalidate();
     }
   },
 

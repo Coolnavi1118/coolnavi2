@@ -136,6 +136,20 @@
           </div>
         </div>
 
+        <!-- ホーム内インライン避難マップ (現在地＆周辺シェルター) -->
+        <div class="section-card-wrapper home-map-section">
+          <div class="section-header-flex">
+            <h3 class="section-heading">🗺️ 周辺クーリングシェルター地図</h3>
+            <button class="btn-text-gold" onclick="window.CoolNaviApp.switchTab('map')">全画面で開く ➔</button>
+          </div>
+          <div class="home-mini-map-card" onclick="window.CoolNaviApp.switchTab('map')">
+            <div id="home-mini-map"></div>
+            <div class="home-map-overlay-badge">
+              <span class="pulse-indicator"></span> タップで全画面ルート案内
+            </div>
+          </div>
+        </div>
+
         <!-- クイックナビゲーション -->
         <div class="quick-nav-grid">
           <button id="btn-quick-map" class="quick-glass-card map-card">
@@ -193,6 +207,9 @@
         <div class="map-floating-controls">
           <button id="btn-map-center" class="map-fab-glass" title="現在地にフォーカス">
             📍 現在地へ
+          </button>
+          <button id="btn-map-redraw" class="map-fab-glass" title="地図を再描画" onclick="MapManager.invalidateSize(true)">
+            🔄 再描画
           </button>
         </div>
 

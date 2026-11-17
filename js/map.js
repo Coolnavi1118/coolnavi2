@@ -1,5 +1,9 @@
 /**
- * map.js - Leaflet 高機能・シック＆エレガントマップ制御 (CartoDB Dark Matter & ゴールド/シアンアクセント)
+ * map.js - Leaflet 高機能・シック＆エレガントマップ制御
+ * 
+ * - 全画面避難マップ (MapManager)
+ * - ホーム画面インラインミニマップ (HomeMiniMap)
+ * - CartoDB Dark Matter & OpenStreetMap 自動フォールバック
  */
 
 const MapManager = {
@@ -10,28 +14,49 @@ const MapManager = {
   routeLayerGroup: null,
   selectedPlaceId: null,
   onPlaceSelectCallback: null,
+  isInitialized: false,
 
   initMap(containerId = 'map-container', onPlaceSelect = null) {
     if (this.map) return;
+
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
     this.onPlaceSelectCallback = onPlaceSelect;
 
     this.map = L.map(containerId, {
       center: [35.6812, 139.7671],
       zoom: 16,
-      zoomControl: false
+      zoomControl: false,
+      attributionControl: true
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
 
-    // シックで上質な CartoDB Dark Matter タイル
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // 1. シックで上質な CartoDB Dark Matter タイル
+    const darkTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
       subdomains: 'abcd',
-      attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(this.map);
+      attribution: '&copy; CARTO &copy; OpenStreetMap'
+    });
 
+    // 2. 万一の読み込みエラー時は標準 OpenStreetMap タイルへ自動フォールバック
+    darkTile.on('tileerror', () => {
+      console.warn("CartoDB タイル取得失敗。OSM 標準タイルへ切り替えます。");
+      if (!this.osmFallbackTile) {
+        this.osmFallbackTile = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(this.map);
+      }
+    });
+
+    darkTile.addTo(this.map);
     this.routeLayerGroup = L.layerGroup().addTo(this.map);
+    this.isInitialized = true;
+
+    // 初回サイズ補正
+    this.invalidateSize();
   },
 
   updateCurrentLocation(location, panToCenter = false) {
@@ -210,11 +235,157 @@ const MapManager = {
     }
   },
 
-  invalidateSize() {
-    if (this.map) {
+  invalidateSize(forcePan = true) {
+    if (!this.map) return;
+    // タブ切り替えのアニメーションとSafariレンダリングに合わせた4段階リフレッシュ
+    [0, 80, 200, 500].forEach(delay => {
       setTimeout(() => {
-        this.map.invalidateSize();
-      }, 150);
+        if (this.map) {
+          this.map.invalidateSize();
+          if (forcePan && this.currentLocationMarker) {
+            this.map.panTo(this.currentLocationMarker.getLatLng(), { animate: false });
+          }
+        }
+      }, delay);
+    });
+  }
+};
+
+/**
+ * HomeMiniMap - ホーム画面専用インラインミニマップ制御
+ * ホーム画面を開いた瞬間に現在地と最寄り避難所の位置関係を直感表示
+ */
+const HomeMiniMap = {
+  map: null,
+  currentMarker: null,
+  placeMarkers: [],
+  routeLine: null,
+
+  init(containerId = 'home-mini-map', onClick = null) {
+    if (this.map) return;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    this.map = L.map(containerId, {
+      center: [35.6812, 139.7671],
+      zoom: 16,
+      zoomControl: false,
+      attributionControl: false,
+      dragging: true,
+      touchZoom: true,
+      doubleClickZoom: false,
+      scrollWheelZoom: false
+    });
+
+    const darkTile = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd'
+    });
+
+    darkTile.on('tileerror', () => {
+      if (!this.osmFallbackTile) {
+        this.osmFallbackTile = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19
+        }).addTo(this.map);
+      }
+    });
+
+    darkTile.addTo(this.map);
+
+    if (onClick) {
+      this.map.on('click', onClick);
     }
+
+    this.invalidate();
+  },
+
+  update(currentLocation, topPlaces = []) {
+    if (!this.map || !currentLocation) return;
+
+    const currentLatLng = [currentLocation.latitude, currentLocation.longitude];
+
+    // 現在地マーカー
+    const locIcon = L.divIcon({
+      className: 'current-location-marker-container',
+      html: `
+        <div class="current-location-wave"></div>
+        <div class="current-location-pulse"></div>
+        <div class="current-location-dot"></div>
+      `,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    if (!this.currentMarker) {
+      this.currentMarker = L.marker(currentLatLng, { icon: locIcon, zIndexOffset: 500 }).addTo(this.map);
+    } else {
+      this.currentMarker.setLatLng(currentLatLng);
+    }
+
+    // 既存シェルターピン消去
+    this.placeMarkers.forEach(m => this.map.removeLayer(m));
+    this.placeMarkers = [];
+
+    const boundsPoints = [currentLatLng];
+
+    // 上位シェルターをプロット
+    topPlaces.slice(0, 4).forEach((place, idx) => {
+      const isTop = idx === 0;
+      const pLatLng = [place.latitude, place.longitude];
+      boundsPoints.push(pLatLng);
+
+      const pIcon = L.divIcon({
+        className: 'place-marker-container',
+        html: `
+          <div class="place-marker-icon ${isTop ? 'super-place' : ''}" style="width:34px;height:34px;font-size:1.1rem;">
+            <span class="marker-symbol">${isTop ? '👑' : '🏛️'}</span>
+          </div>
+        `,
+        iconSize: [34, 34],
+        iconAnchor: [17, 34]
+      });
+
+      const marker = L.marker(pLatLng, { icon: pIcon }).addTo(this.map);
+      this.placeMarkers.push(marker);
+    });
+
+    // 1位への誘導点線
+    if (this.routeLine) {
+      this.map.removeLayer(this.routeLine);
+      this.routeLine = null;
+    }
+
+    if (topPlaces.length > 0) {
+      const topTarget = [topPlaces[0].latitude, topPlaces[0].longitude];
+      this.routeLine = L.polyline([currentLatLng, topTarget], {
+        color: '#D4AF37',
+        weight: 3,
+        opacity: 0.85,
+        dashArray: '6, 8'
+      }).addTo(this.map);
+    }
+
+    // 範囲自動フィット
+    if (boundsPoints.length > 1) {
+      try {
+        const bounds = L.latLngBounds(boundsPoints);
+        this.map.fitBounds(bounds, { padding: [35, 35], maxZoom: 17, animate: false });
+      } catch (e) {
+        this.map.setView(currentLatLng, 16);
+      }
+    } else {
+      this.map.setView(currentLatLng, 16);
+    }
+
+    this.invalidate();
+  },
+
+  invalidate() {
+    if (!this.map) return;
+    [0, 100, 300].forEach(d => {
+      setTimeout(() => {
+        if (this.map) this.map.invalidateSize();
+      }, d);
+    });
   }
 };

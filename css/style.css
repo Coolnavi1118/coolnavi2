@@ -173,10 +173,28 @@ body {
   display: block;
 }
 
-#tab-view-map.tab-view,
+#tab-view-map.tab-view {
+  padding: 0;
+  overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+}
+
 #tab-view-ar.tab-view {
   padding: 0;
   overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* ================= 1. ホーム画面 ================= */
@@ -876,21 +894,101 @@ body {
 }
 
 /* ================= 3. 地図画面 (CartoDB Dark Matter 連動) ================= */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  background: #0B0E14 !important;
+  font-family: inherit !important;
+}
+
 #map-container {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   z-index: 1;
   background: #0B0E14;
+}
+
+/* ホーム画面専用 インラインミニマップ */
+.home-map-section {
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.home-mini-map-card {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-medium);
+  box-shadow: var(--shadow-card);
+  background: #0B0E14;
+  cursor: pointer;
+}
+
+#home-mini-map {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  inset: 0 !important;
+}
+
+.home-map-overlay-badge {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 500;
+  background: rgba(11, 14, 20, 0.9);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-gold);
+  color: var(--accent-gold);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.pulse-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  animation: pulse-ring 1.5s infinite;
+}
+
+.btn-text-gold {
+  background: none;
+  border: none;
+  color: var(--accent-gold);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.btn-text-gold:active {
+  opacity: 0.7;
 }
 
 .map-floating-controls {
   position: absolute;
   top: calc(var(--sat) + 16px);
   right: 16px;
-  z-index: 10;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .map-fab-glass {
@@ -899,11 +997,16 @@ body {
   color: var(--text-primary);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-full);
-  padding: 10px 18px;
-  font-size: 0.8rem;
+  padding: 9px 15px;
+  font-size: 0.78rem;
   font-weight: 700;
   box-shadow: var(--shadow-card);
   cursor: pointer;
+}
+
+.map-fab-glass:active {
+  background: rgba(212, 175, 55, 0.2);
+  border-color: var(--border-gold);
 }
 
 /* 地図マーカー (シック) */
