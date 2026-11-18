@@ -76,8 +76,8 @@ const MapManager = {
       if (!this.currentAccuracyCircle) {
         this.currentAccuracyCircle = L.circle(latLng, {
           radius: Math.min(location.accuracy, 150),
-          color: '#38BDF8',
-          fillColor: '#38BDF8',
+          color: '#0284C7',
+          fillColor: '#0EA5E9',
           fillOpacity: 0.12,
           weight: 1.5,
           dashArray: '4, 4'
@@ -158,44 +158,44 @@ const MapManager = {
     this.routeLayerGroup.clearLayers();
     if (!routeData || !routeData.coordinates || routeData.coordinates.length < 2) return;
 
-    // 1. シャンパンゴールド光彩背景線
+    // 1. スカイブルー光彩背景線 (白基調地図に美しく調和)
     const glowPolyline = L.polyline(routeData.coordinates, {
-      color: '#D4AF37',
+      color: '#0284C7',
       weight: 12,
-      opacity: 0.22,
+      opacity: 0.18,
       lineCap: 'round',
       lineJoin: 'round'
     });
     this.routeLayerGroup.addLayer(glowPolyline);
 
-    // 2. コアの道路沿いルートライン (シックなシャンパンゴールド)
+    // 2. コアの道路沿いルートライン (上質なディープセルリアン)
     const mainPolyline = L.polyline(routeData.coordinates, {
-      color: '#D4AF37',
-      weight: 4.5,
+      color: '#0284C7',
+      weight: 5,
       opacity: 0.95,
       lineCap: 'round',
       lineJoin: 'round'
     });
     this.routeLayerGroup.addLayer(mainPolyline);
 
-    // 3. 進行方向の動的ドット (プラチナホワイト)
+    // 3. 進行方向の動的ドット (清潔感のあるホワイト)
     const animatedLine = L.polyline(routeData.coordinates, {
-      color: '#F3E5AB',
-      weight: 2,
-      opacity: 0.85,
+      color: '#FFFFFF',
+      weight: 2.5,
+      opacity: 0.95,
       dashArray: '5, 10'
     });
     this.routeLayerGroup.addLayer(animatedLine);
 
-    // 4. 曲がり角マーカー (シアン)
+    // 4. 曲がり角マーカー (オレンジ)
     if (routeData.steps && routeData.steps.length > 2) {
       routeData.steps.slice(1, -1).forEach(step => {
         const turnDot = L.circleMarker(step.location, {
           radius: 5,
           color: '#FFFFFF',
-          fillColor: '#38BDF8',
+          fillColor: '#FF6B00',
           fillOpacity: 1,
-          weight: 2
+          weight: 2.5
         });
         turnDot.bindTooltip(step.instruction, { direction: 'top', offset: [0, -8] });
         this.routeLayerGroup.addLayer(turnDot);
@@ -338,9 +338,9 @@ const HomeMiniMap = {
     if (topPlaces.length > 0) {
       const topTarget = [topPlaces[0].latitude, topPlaces[0].longitude];
       this.routeLine = L.polyline([currentLatLng, topTarget], {
-        color: '#D4AF37',
-        weight: 3,
-        opacity: 0.85,
+        color: '#0284C7',
+        weight: 3.5,
+        opacity: 0.9,
         dashArray: '6, 8'
       }).addTo(this.map);
     }
