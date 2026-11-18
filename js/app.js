@@ -459,6 +459,16 @@ window.CoolNaviApp = {
       }
     } else if (tabName === 'home') {
       HomeMiniMap.invalidate();
+    } else if (tabName === 'ar') {
+      // ボトムナビからARを開いた際、自動で避難ナビを開始
+      if (!this.selectedPlace && this.currentLocation) {
+        const top = PlacesManager.getTopRecommendedPlace(this.currentLocation);
+        if (top) {
+          this.startARForPlace(top.id);
+        }
+      } else if (this.selectedPlace && !ARManager.isCameraActive) {
+        this.startARForPlace(this.selectedPlace.id);
+      }
     }
   },
 
@@ -679,6 +689,9 @@ window.CoolNaviApp = {
     const arTargetName = document.getElementById('ar-target-name');
     if (arTargetName) arTargetName.textContent = place.name;
 
+    // ★iOS Safariのユーザージェスチャー有効期限内に即座にコンパスとカメラを起動！
+    const arStartPromise = ARManager.startAR();
+
     let route = this.currentRoute;
     if (!route || route.isRoadNetwork === false) {
       try {
@@ -697,7 +710,7 @@ window.CoolNaviApp = {
     ARManager.setNavigation(place, this.currentLocation, route);
 
     try {
-      const result = await ARManager.startAR();
+      const result = await arStartPromise;
       const container = document.getElementById('ar-container');
       const toggleBtn = document.getElementById('btn-toggle-ar-camera');
 
