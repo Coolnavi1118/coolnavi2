@@ -278,34 +278,14 @@ const ARManager = {
 
     this.wasStraight = isStraight;
 
-    // 3D空間浮遊ピンおよび目的建物ビーコンのスクリーン投影 (FOV 65度)
+    // 3D空間浮遊ピンのスクリーン投影 (FOV 65度)
     const horizontalFov = 65;
-    let relativeAngleForTarget = relativeAngle; // 次のステップ方向
-
-    // 最終目的地の建物の方位差
-    let buildingRelativeAngle = (finalBearing - this.deviceHeading + 360) % 360;
-    if (buildingRelativeAngle > 180) buildingRelativeAngle -= 360;
-
-    const isBuildingInView = Math.abs(buildingRelativeAngle) < (horizontalFov / 2);
-    let buildingScreenXPercent = (buildingRelativeAngle / (horizontalFov / 2)) * 46;
+    let screenXPercent = (relativeAngle / (horizontalFov / 2)) * 50;
+    const isVisibleInScreen = Math.abs(relativeAngle) < (horizontalFov / 2);
 
     const targetPitch = 75; // スマホ垂直持ち
     const pitchDiff = (this.devicePitch - targetPitch);
-    let buildingScreenYPercent = Math.max(-35, Math.min(35, pitchDiff * 0.7));
-
-    // 画面外の建物を案内する画面端ガイド (左か右か)
-    let buildingEdgeDirection = null;
-    if (!isBuildingInView) {
-      buildingEdgeDirection = buildingRelativeAngle > 0 ? 'right' : 'left';
-    }
-
-    // 浮遊ピン用スクリーン座標
-    let screenXPercent = (relativeAngle / (horizontalFov / 2)) * 48;
-    const isVisibleInScreen = Math.abs(relativeAngle) < (horizontalFov / 2);
     let screenYPercent = Math.max(-38, Math.min(38, pitchDiff * 0.7));
-
-    // AR路面ガイダンスのパースペクティブ計算
-    const roadPitch = Math.max(25, Math.min(75, this.devicePitch || 55));
 
     // 日陰歩行アドバイス
     const shadeAdvice = getShadeAdvice(targetBearing, this.currentLocation.latitude, this.currentLocation.longitude);
@@ -317,8 +297,6 @@ const ARManager = {
       formattedTargetDistance: formatDistance(targetDistance),
       finalDistance,
       formattedFinalDistance: formatDistance(finalDistance),
-      metersToDestination: Math.round(finalDistance),
-      metersToNextTurn: Math.round(targetDistance),
       walkingMinutes: calculateWalkingMinutes(finalDistance),
       targetBearing,
       finalBearing,
@@ -335,12 +313,6 @@ const ARManager = {
       screenXPercent,
       screenYPercent,
       isVisibleInScreen,
-      isBuildingInView,
-      buildingScreenXPercent,
-      buildingScreenYPercent,
-      buildingEdgeDirection,
-      buildingRelativeAngle,
-      roadPitch,
       shadeAdvice,
       isCameraActive: this.isCameraActive,
       isOrientationActive: this.isOrientationActive

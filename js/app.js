@@ -459,16 +459,6 @@ window.CoolNaviApp = {
       }
     } else if (tabName === 'home') {
       HomeMiniMap.invalidate();
-    } else if (tabName === 'ar') {
-      // ボトムナビからARを開いた際、自動で避難ナビを開始
-      if (!this.selectedPlace && this.currentLocation) {
-        const top = PlacesManager.getTopRecommendedPlace(this.currentLocation);
-        if (top) {
-          this.startARForPlace(top.id);
-        }
-      } else if (this.selectedPlace && !ARManager.isCameraActive) {
-        this.startARForPlace(this.selectedPlace.id);
-      }
     }
   },
 
@@ -689,9 +679,6 @@ window.CoolNaviApp = {
     const arTargetName = document.getElementById('ar-target-name');
     if (arTargetName) arTargetName.textContent = place.name;
 
-    // ★iOS Safariのユーザージェスチャー有効期限内に即座にコンパスとカメラを起動！
-    const arStartPromise = ARManager.startAR();
-
     let route = this.currentRoute;
     if (!route || route.isRoadNetwork === false) {
       try {
@@ -710,7 +697,7 @@ window.CoolNaviApp = {
     ARManager.setNavigation(place, this.currentLocation, route);
 
     try {
-      const result = await arStartPromise;
+      const result = await ARManager.startAR();
       const container = document.getElementById('ar-container');
       const toggleBtn = document.getElementById('btn-toggle-ar-camera');
 
@@ -730,7 +717,6 @@ window.CoolNaviApp = {
   renderAROverlay(state) {
     const arrowEl = document.getElementById('ar-direction-arrow');
     const targetRing = document.getElementById('ar-target-ring');
-    const ringMetersNum = document.getElementById('ar-ring-meters-num');
     const distEl = document.getElementById('ar-distance-text');
     const walkEl = document.getElementById('ar-walking-text');
     const guideEl = document.getElementById('ar-guide-message');
@@ -745,21 +731,7 @@ window.CoolNaviApp = {
     const turnStepEl = document.getElementById('ar-turn-step-count');
     const floatingPin = document.getElementById('ar-floating-pin');
 
-    // 新規: 建物強調ビーコン & 画面端ガイド & 路面ガイダンス
-    const buildingBeacon = document.getElementById('ar-building-beacon');
-    const beaconName = document.getElementById('beacon-place-name');
-    const beaconMeters = document.getElementById('beacon-dist-meters');
-    const beaconWalk = document.getElementById('beacon-walk-time');
-    const edgeLeft = document.getElementById('ar-edge-indicator-left');
-    const edgeRight = document.getElementById('ar-edge-indicator-right');
-    const edgeDistLeft = document.getElementById('ar-edge-dist-left');
-    const edgeDistRight = document.getElementById('ar-edge-dist-right');
-    const roadPlane = document.getElementById('ar-road-plane');
-    const turnNode = document.getElementById('ar-road-turn-node');
-    const turnNodeIcon = document.getElementById('ar-turn-node-icon');
-    const turnNodeDist = document.getElementById('ar-turn-node-dist');
-
-    // 1. 中央コンパス矢印の回転 & ロックオン発光 & リング内「何メートル」数字
+    // 1. 中央コンパス矢印の回転 & ロックオン発光
     if (arrowEl) {
       arrowEl.style.transform = `rotate(${state.relativeAngle}deg)`;
       if (state.isStraight) {
@@ -771,74 +743,12 @@ window.CoolNaviApp = {
       }
     }
 
-    if (ringMetersNum) {
-      ringMetersNum.textContent = state.metersToDestination;
-    }
-
-    // 2. カメラ越し道路ガイダンス (足元の地面に映る光の矢印ウェイ)
-    if (roadPlane) {
-      if (state.isCameraActive) {
-        roadPlane.style.display = 'block';
-        // 端末ピッチ角と進行方向に応じた路面3Dパースペクティブ変形
-        roadPlane.style.transform = `perspective(550px) rotateX(${state.roadPitch}deg) rotateZ(${-state.relativeAngle * 0.75}deg) rotateY(${state.roll * 0.4}deg)`;
-        
-        // 路面上の曲がり角ノード標示
-        if (turnNode && state.currentStepInfo) {
-          turnNode.style.display = 'flex';
-          if (turnNodeIcon) turnNodeIcon.textContent = state.turnIcon;
-          if (turnNodeDist) turnNodeDist.textContent = `角まで あと${state.metersToNextTurn}m`;
-        } else if (turnNode) {
-          turnNode.style.display = 'none';
-        }
-      } else {
-        roadPlane.style.display = 'none';
-      }
-    }
-
-    // 3. 目的の建物がカメラに入ったときの強調表示ビーコン (ロックオン)
-    if (buildingBeacon && state.destination) {
-      if (state.isBuildingInView && state.isCameraActive) {
-        buildingBeacon.style.display = 'flex';
-        buildingBeacon.style.transform = `translate(${state.buildingScreenXPercent * 3.8}px, ${state.buildingScreenYPercent * 2.2}px)`;
-        if (beaconName) beaconName.textContent = state.destination.name;
-        if (beaconMeters) beaconMeters.textContent = `あと ${state.formattedFinalDistance}`;
-        if (beaconWalk) beaconWalk.textContent = `徒歩約${state.walkingMinutes}分`;
-
-        // 正面近くなら強力にロックオン発光
-        if (Math.abs(state.buildingRelativeAngle) <= 15) {
-          buildingBeacon.classList.add('locked-on');
-        } else {
-          buildingBeacon.classList.remove('locked-on');
-        }
-      } else {
-        buildingBeacon.style.display = 'none';
-      }
-    }
-
-    // 4. 画面外の建物を指示する画面端ガイド (左右インジケーター)
-    if (edgeLeft && edgeRight) {
-      if (!state.isBuildingInView && state.isCameraActive) {
-        if (state.buildingEdgeDirection === 'left') {
-          edgeLeft.style.display = 'flex';
-          edgeRight.style.display = 'none';
-          if (edgeDistLeft) edgeDistLeft.textContent = `建物は左側 あと${state.formattedFinalDistance}`;
-        } else {
-          edgeRight.style.display = 'flex';
-          edgeLeft.style.display = 'none';
-          if (edgeDistRight) edgeDistRight.textContent = `建物は右側 あと${state.formattedFinalDistance}`;
-        }
-      } else {
-        edgeLeft.style.display = 'none';
-        edgeRight.style.display = 'none';
-      }
-    }
-
-    // 5. ジャイロ地平線インジケーター (ロール傾きに追従)
+    // 2. ジャイロ地平線インジケーター (ロール傾きに追従)
     if (horizonBar) {
       horizonBar.style.transform = `rotate(${-state.roll}deg) translateY(${state.screenYPercent * 2}px)`;
     }
 
-    // 6. ターンバイターン指示カード
+    // 3. ターンバイターン指示カード
     if (turnCard && state.currentStepInfo) {
       turnCard.style.display = 'flex';
       if (turnIconEl) turnIconEl.textContent = state.turnIcon;
@@ -848,12 +758,12 @@ window.CoolNaviApp = {
       }
     }
 
-    // 7. 日陰アシストバナー
+    // 4. 日陰アシストバナー
     if (shadeBanner && state.shadeAdvice) {
       shadeBanner.textContent = `☂️ ${state.shadeAdvice.text}`;
     }
 
-    // 8. 3D空間浮遊ピン (旧ピンも補助として連動)
+    // 5. 3D空間浮遊ピン
     if (floatingPin) {
       if (state.isVisibleInScreen && state.isCameraActive) {
         floatingPin.style.display = 'flex';
