@@ -231,6 +231,52 @@
             <div class="radar-self-dot"></div>
           </div>
 
+          <!-- カメラ越しのAR路面誘導ウェイ (地面に映る光の矢印) -->
+          <div id="ar-virtual-road" class="ar-virtual-road">
+            <div id="ar-road-plane" class="road-perspective-plane">
+              <div class="road-path-glow"></div>
+              <div class="road-chevrons">
+                <span class="chevron c-1">▲</span>
+                <span class="chevron c-2">▲</span>
+                <span class="chevron c-3">▲</span>
+                <span class="chevron c-4">▲</span>
+              </div>
+              <div id="ar-road-turn-node" class="road-turn-node">
+                <span id="ar-turn-node-icon" class="turn-node-symbol">↱</span>
+                <span id="ar-turn-node-dist" class="turn-node-text">あと --m</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 目的地の建物がカメラに入ったときの強調表示ビーコン & ロックオン -->
+          <div id="ar-building-beacon" class="ar-building-beacon">
+            <div class="beacon-light-pillar"></div>
+            <div class="beacon-lock-bracket">
+              <span class="bracket-corner tl"></span>
+              <span class="bracket-corner tr"></span>
+              <span class="bracket-corner bl"></span>
+              <span class="bracket-corner br"></span>
+              <div class="beacon-target-card">
+                <span class="beacon-status-pill">🎯 避難所ロックオン</span>
+                <span id="beacon-place-name" class="beacon-place-name">施設名</span>
+                <div class="beacon-dist-row">
+                  <span id="beacon-dist-meters" class="beacon-dist-meters">あと --m</span>
+                  <span id="beacon-walk-time" class="beacon-walk-time">徒歩約--分</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 画面外の建物を指示する画面端ガイド -->
+          <div id="ar-edge-indicator-left" class="ar-edge-indicator left">
+            <span class="edge-arrow">⬅</span>
+            <span id="ar-edge-dist-left" class="edge-text">あと --m</span>
+          </div>
+          <div id="ar-edge-indicator-right" class="ar-edge-indicator right">
+            <span id="ar-edge-dist-right" class="edge-text">あと --m</span>
+            <span class="edge-arrow">➔</span>
+          </div>
+
           <!-- AR空間浮遊ピン -->
           <div id="ar-floating-pin" class="ar-floating-pin">
             <div class="pin-bubble-glow">
@@ -279,6 +325,11 @@
                   <svg viewBox="0 0 100 100" class="arrow-svg">
                     <polygon points="50,6 88,78 50,60 12,78" fill="currentColor" />
                   </svg>
+                </div>
+                <!-- リング中央の直感距離表示 -->
+                <div class="ar-ring-meters-badge">
+                  <span id="ar-ring-meters-num" class="ring-meters-val">--</span>
+                  <span class="ring-meters-unit">m</span>
                 </div>
               </div>
               <!-- ジャイロ地平線バー -->

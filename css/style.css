@@ -1418,6 +1418,297 @@ body {
   transition: transform 0.2s ease-out;
 }
 
+/* ================= カメラ越しのAR路面誘導ウェイ (Virtual Road) ================= */
+.ar-virtual-road {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 60%;
+  pointer-events: none;
+  z-index: 3;
+  overflow: hidden;
+  perspective: 550px;
+  -webkit-perspective: 550px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.road-perspective-plane {
+  width: 240px;
+  height: 380px;
+  position: relative;
+  transform-origin: bottom center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  transition: transform 0.12s ease-out;
+}
+
+/* 路面の光る誘導ライン */
+.road-path-glow {
+  position: absolute;
+  bottom: 0;
+  width: 68px;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(2, 132, 199, 0.4) 0%, rgba(2, 132, 199, 0.1) 80%, transparent 100%);
+  border-left: 2.5px solid rgba(56, 189, 248, 0.8);
+  border-right: 2.5px solid rgba(56, 189, 248, 0.8);
+  box-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
+}
+
+/* 前進アニメーションするシェブロン矢印 */
+.road-chevrons {
+  position: absolute;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 32px;
+  z-index: 2;
+}
+
+.chevron {
+  font-size: 1.8rem;
+  color: #38BDF8;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+  animation: chevron-flow 1.5s infinite ease-in;
+}
+
+.chevron.c-1 { animation-delay: 0s; }
+.chevron.c-2 { animation-delay: 0.35s; }
+.chevron.c-3 { animation-delay: 0.7s; }
+.chevron.c-4 { animation-delay: 1.05s; }
+
+@keyframes chevron-flow {
+  0% { transform: translateY(0) scale(1.1); opacity: 0.9; }
+  100% { transform: translateY(-120px) scale(0.6); opacity: 0.1; }
+}
+
+/* 路面上の交差点ターンノード */
+.road-turn-node {
+  position: absolute;
+  top: 15px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid var(--accent-primary);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: pulse-turn-node 1.8s infinite alternate;
+}
+
+@keyframes pulse-turn-node {
+  0% { transform: scale(0.95); box-shadow: 0 0 10px rgba(2, 132, 199, 0.3); }
+  100% { transform: scale(1.05); box-shadow: 0 0 25px rgba(2, 132, 199, 0.6); }
+}
+
+.turn-node-symbol {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--accent-primary);
+}
+
+.turn-node-text {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #0F172A;
+  white-space: nowrap;
+}
+
+/* ================= 目的地の建物強調表示ビーコン & ロックオン ================= */
+.ar-building-beacon {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  z-index: 9;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  transition: transform 0.12s ease-out;
+}
+
+/* 空に向かって伸びるライトピラー (光の柱) */
+.beacon-light-pillar {
+  width: 4px;
+  height: 220px;
+  background: linear-gradient(0deg, rgba(2, 132, 199, 0.8) 0%, rgba(56, 189, 248, 0.4) 60%, transparent 100%);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.8);
+  animation: pillar-glow 2s infinite alternate;
+}
+
+@keyframes pillar-glow {
+  0% { opacity: 0.6; width: 3px; }
+  100% { opacity: 1; width: 6px; box-shadow: 0 0 24px rgba(56, 189, 248, 1); }
+}
+
+/* ロックオン四隅ブラケット */
+.beacon-lock-bracket {
+  position: relative;
+  padding: 12px;
+  margin-top: -10px;
+}
+
+.bracket-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: #38BDF8;
+  border-style: solid;
+}
+
+.bracket-corner.tl { top: 0; left: 0; border-width: 2.5px 0 0 2.5px; }
+.bracket-corner.tr { top: 0; right: 0; border-width: 2.5px 2.5px 0 0; }
+.bracket-corner.bl { bottom: 0; left: 0; border-width: 0 0 2.5px 2.5px; }
+.bracket-corner.br { bottom: 0; right: 0; border-width: 0 2.5px 2.5px 0; }
+
+.ar-building-beacon.locked-on .bracket-corner {
+  border-color: #34D399;
+}
+
+/* 建物強調カード (白すりガラス) */
+.beacon-target-card {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1.5px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  min-width: 170px;
+}
+
+.ar-building-beacon.locked-on .beacon-target-card {
+  border-color: #34D399;
+  box-shadow: 0 0 30px rgba(52, 211, 153, 0.6);
+}
+
+.beacon-status-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--accent-primary);
+  background: var(--accent-primary-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.ar-building-beacon.locked-on .beacon-status-pill {
+  color: #065F46;
+  background: #D1FAE5;
+}
+
+.beacon-place-name {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0F172A;
+  white-space: nowrap;
+}
+
+.beacon-dist-row {
+  display: flex;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.beacon-dist-meters {
+  color: var(--accent-primary);
+  font-size: 0.85rem;
+}
+
+.beacon-walk-time {
+  color: var(--text-secondary);
+}
+
+/* ================= 画面外の建物を案内する画面端ガイド ================= */
+.ar-edge-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1.5px solid var(--accent-primary);
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: edge-pulse 1.4s infinite alternate;
+}
+
+.ar-edge-indicator.left {
+  left: 12px;
+}
+
+.ar-edge-indicator.right {
+  right: 12px;
+}
+
+@keyframes edge-pulse {
+  0% { transform: translateY(-50%) scale(0.96); }
+  100% { transform: translateY(-50%) scale(1.04); }
+}
+
+.edge-arrow {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--accent-primary);
+}
+
+.edge-text {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #0F172A;
+  white-space: nowrap;
+}
+
+/* ================= リング中央の「何メートル」リアルタイム表示 ================= */
+.ar-ring-meters-badge {
+  position: absolute;
+  bottom: 12px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ring-meters-val {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #38BDF8;
+  line-height: 1;
+}
+
+.ar-target-ring.locked-on .ring-meters-val {
+  color: #34D399;
+}
+
+.ring-meters-unit {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
 /* 3D空間浮遊ピン (白すりガラスバルーン) */
 .ar-floating-pin {
   position: absolute;
